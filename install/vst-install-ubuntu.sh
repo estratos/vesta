@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 RHOST='apt.vestacp.com'
 CHOST='c.vestacp.com'
 VERSION='0.9.8/ubuntu'
-software="nginx apache2 apache2-utils apache2-suexec-custom
+software="nginx apache2 apache2-utils apache2-suexec-custom bsdutils e2fsprogs
     libapache2-mod-ruid2 libapache2-mod-rpaf libapache2-mod-fcgid bind9 idn
     mysql-server mysql-common mysql-client php5-common php5-cgi php5-mysql
     php5-curl libapache2-mod-php5 vsftpd mc exim4 exim4-daemon-heavy
@@ -484,6 +484,11 @@ if [ "$srv_type" = 'micro' ]; then
     rm -f /usr/local/vesta/data/templates/web/apache2/phpfcgid.*
 fi
 
+# Removing CGI templates
+if [ "$codename" = 'trusty' ]; then
+    rm -f /usr/local/vesta/data/templates/web/apache2/phpcgi.*
+fi
+
 # Generating SSL certificate
 $VESTA/bin/v-generate-ssl-cert $(hostname) $email 'US' 'California' \
      'San Francisco' 'Vesta Control Panel' 'IT' > /tmp/vst.pem
@@ -519,7 +524,9 @@ echo "/sbin/nologin" >> /etc/shells
 
 # Sudo configuration
 wget $CHOST/$VERSION/sudoers.conf -O /etc/sudoers
-chmod 0440 /etc/sudoers
+wget $CHOST/$VERSION/sudoers.admin.conf -O /etc/sudoers.d/admin
+chmod 440 /etc/sudoers
+chmod 440 /etc/sudoers.d/admin
 
 # NTP Synchronization
 echo '#!/bin/sh' > /etc/cron.daily/ntpdate
@@ -598,7 +605,6 @@ if [ -z "$mpass" ]; then
 fi
 
 # MySQL configuration
-mpass=$(gen_pass)
 wget $CHOST/$VERSION/my.cnf -O /etc/mysql/my.cnf
 mysql_install_db
 if [ "$release" != '14.04' ]; then
