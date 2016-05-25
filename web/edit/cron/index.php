@@ -45,7 +45,15 @@ if ( $v_suspended == 'yes' ) {
 
 // Check POST request
 if (!empty($_POST['save'])) {
+
+    // Check token
+    if ((!isset($_POST['token'])) || ($_SESSION['token'] != $_POST['token'])) {
+        header('location: /login/');
+        exit();
+    }
+
     $v_username = $user;
+    $v_job = escapeshellarg($_GET['job']); 
     $v_min = escapeshellarg($_POST['v_min']);
     $v_hour = escapeshellarg($_POST['v_hour']);
     $v_day = escapeshellarg($_POST['v_day']);

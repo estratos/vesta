@@ -1,5 +1,5 @@
 #!/bin/bash
-# info: change database password
+# info: change database owner
 # options: DATABASE USER
 #
 # The function for changing database owner.
@@ -9,7 +9,7 @@
 #                    Variable&Function                     #
 #----------------------------------------------------------#
 
-# Argument defenition
+# Argument definition
 database=$1
 user=$2
 

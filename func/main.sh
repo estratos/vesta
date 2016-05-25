@@ -2,16 +2,6 @@
 DATE=$(date +%F)
 TIME=$(date +%T)
 SCRIPT=$(basename $0)
-A1=$1
-A2=$2
-A3=$3
-A4=$4
-A5=$5
-A6=$6
-A7=$7
-A8=$8
-A9=$9
-EVENT="$DATE $TIME $SCRIPT $A1 $A2 $A3 $A4 $A5 $A6 $A7 $A8 $A9"
 HOMEDIR='/home'
 BACKUP='/backup'
 BACKUP_GZIP=5
@@ -26,6 +16,7 @@ USER_DATA=$VESTA/data/users/$user
 WEBTPL=$VESTA/data/templates/web
 DNSTPL=$VESTA/data/templates/dns
 RRD=$VESTA/web/rrd
+send_mail="$VESTA/web/inc/mail-wrapper.php"
 
 # Return codes
 OK=0
@@ -49,6 +40,16 @@ E_DB=17
 E_RRD=18
 E_UPDATE=19
 E_RESTART=20
+
+# Event string for logger
+EVENT="$DATE $TIME $SCRIPT"
+for ((I=1; I <= $# ; I++)); do
+    if [[ "$HIDE" != $I ]]; then
+        EVENT="$EVENT '$(eval echo \$${I})'"
+    else
+        EVENT="$EVENT '******'"
+    fi
+done
 
 # Log event function
 log_event() {
@@ -78,6 +79,20 @@ log_history() {
     echo "ID='$id' DATE='$DATE' TIME='$TIME' CMD='$cmd' UNDO='$undo'" >> $log
 }
 
+# Result checker
+check_result() {
+    if [ $1 -ne 0 ]; then
+        echo "Error: $2"
+        if [ ! -z "$3" ]; then
+            log_event $3 $EVENT
+            exit $3
+        else
+            log_event $1 $EVENT
+            exit $1
+        fi
+    fi
+}
+
 # Argument list checker
 check_args() {
     if [ "$1" -gt "$2" ]; then
@@ -91,7 +106,7 @@ check_args() {
 # Subsystem checker
 is_system_enabled() {
     if [ -z "$1" ] || [ "$1" = no ]; then
-        echo "Error: $2 is disabled in the vesta.conf"
+        echo "Error: $2 is not enabled in the $VESTA/conf/vesta.conf"
         log_event "$E_DISABLED" "$EVENT"
         exit $E_DISABLED
     fi
@@ -113,8 +128,8 @@ is_package_full() {
         CRON_JOBS) used=$(wc -l $USER_DATA/cron.conf |cut -f1 -d \ );;
     esac
     limit=$(grep "^$1=" $USER_DATA/user.conf | cut -f 2 -d \' )
-    if [ "$used" -ge "$limit" ]; then
-        echo "Error: Limit reached / Upgrade package"
+    if [ "$limit" != 'unlimited' ] && [ "$used" -ge "$limit" ]; then
+        echo "Error: Limit is reached, please upgrade hosting package"
         log_event "$E_LIMIT" "$EVENT"
         exit $E_LIMIT
     fi
@@ -243,7 +258,7 @@ is_object_unsuspended() {
         spnd=$(grep "$2='$3'" $USER_DATA/$1.conf|grep "SUSPENDED='yes'")
     fi
     if [ ! -z "$spnd" ]; then
-        echo "Error: $(basename $1) $3 is already suspended"
+        echo "Error: $(basename $1) $3 is suspended"
         log_event "$E_UNSUSPENDED" "$EVENT"
         exit $E_UNSUSPENDED
     fi
@@ -273,6 +288,15 @@ is_object_value_exist() {
     fi
 }
 
+# Check if password is transmitted via file
+is_password_valid() {
+    if [[ "$password" =~ ^/tmp/ ]]; then
+        if [ -f "$password" ]; then
+            password=$(head -n1 $password)
+        fi
+    fi
+}
+
 # Get object value
 get_object_value() {
     object=$(grep "$2='$3'" $USER_DATA/$1.conf)
@@ -282,7 +306,7 @@ get_object_value() {
 
 # Update object value
 update_object_value() {
-    row=$(grep -n "$2='$3'" $USER_DATA/$1.conf)
+    row=$(grep -nF "$2='$3'" $USER_DATA/$1.conf)
     lnr=$(echo $row | cut -f 1 -d ':')
     object=$(echo $row | sed "s/^$lnr://")
     eval "$object"
@@ -317,7 +341,7 @@ search_objects() {
 
 # Get user value
 get_user_value() {
-    grep "^${1//$/}=" $USER_DATA/user.conf| cut -f 2 -d \'
+    grep "^${1//$/}=" $USER_DATA/user.conf |awk -F "'" '{print $2}'
 }
 
 # Update user value in user.conf
@@ -356,6 +380,9 @@ decrease_user_value() {
         new=0
     else
         new=$((old - factor))
+    fi
+    if [ "$new" -lt 0 ]; then
+        new=0
     fi
     sed -i "s/$key='$old'/$key='$new'/g" $conf
 }
@@ -454,7 +481,7 @@ recalc_user_disk_usage() {
         sed -i "s/U_DISK_DB='$d'/U_DISK_DB='$usage'/g" $USER_DATA/user.conf
         u_usage=$((u_usage + usage))
     fi
-    usage=$(grep 'U_DIR_DISK=' $USER_DATA/user.conf | cut -f 2 -d "'")
+    usage=$(grep 'U_DISK_DIRS=' $USER_DATA/user.conf | cut -f 2 -d "'")
     u_usage=$((u_usage + usage))
     old=$(grep "U_DISK='" $USER_DATA/user.conf | cut -f 2 -d \')
     sed -i "s/U_DISK='$old'/U_DISK='$u_usage'/g" $USER_DATA/user.conf
@@ -564,13 +591,25 @@ validate_format_interface() {
 
 # IP address
 validate_format_ip() {
+    t_ip=$(echo $1 |awk -F / '{print $1}')
+    t_cidr=$(echo $1 |awk -F / '{print $2}')
     valid_octets=0
-    for octet in ${1//./ }; do
+    valid_cidr=1
+    for octet in ${t_ip//./ }; do
         if [[ $octet =~ ^[0-9]{1,3}$ ]] && [[ $octet -le 255 ]]; then
             ((++valid_octets))
         fi
     done
-    if [ "$valid_octets" -lt 4 ]; then
+
+    if [ ! -z "$(echo $1|grep '/')" ]; then
+        if [[ "$t_cidr" -lt 0 ]] || [[ "$t_cidr" -gt 32 ]]; then
+            valid_cidr=0
+        fi
+        if ! [[ "$t_cidr" =~ ^[0-9]+$ ]]; then
+            valid_cidr=0
+        fi
+    fi
+    if [ "$valid_octets" -lt 4 ] || [ "$valid_cidr" -eq 0 ]; then
         echo "Error: ip $1 is not valid"
         log_event "$E_INVALID" "$EVENT"
         exit $E_INVALID
@@ -588,14 +627,7 @@ validate_format_ip_status() {
 
 # Email address
 validate_format_email() {
-    local_part=$(echo $1 | cut  -s -f1 -d\@)
-    remote_host=$(echo $1 | cut -s -f2 -d\@)
-    mx_failed=1
-    if [ ! -z "$remote_host" ] && [ ! -z "$local_part" ]; then
-        /usr/bin/host -t mx "$remote_host" &> /dev/null
-        mx_failed="$?"
-    fi
-    if [ "$mx_failed" -eq 1 ]; then
+    if [[ ! "$1" =~ "@" ]] ; then
         echo "Error: email $1 is not valid"
         log_event "$E_INVALID" "$EVENT"
         exit $E_INVALID
@@ -625,12 +657,14 @@ validate_format_username() {
     if [ "${#1}" -eq 1 ]; then
         if ! [[ "$1" =~ [a-z] ]]; then
             echo "Error: $2 $1 is not valid"
+            log_event "$E_INVALID" "$EVENT"
             exit 1
         fi
     else
         if ! [[ "$1" =~ ^[a-zA-Z0-9][-|\.|_|a-zA-Z0-9]{0,28}[a-zA-Z0-9]$ ]]
         then
             echo "Error: $2 $1 is not valid"
+            log_event "$E_INVALID" "$EVENT"
             exit 1
         fi
     fi
@@ -650,7 +684,7 @@ validate_format_domain() {
 validate_format_domain_alias() {
     exclude="[!|@|#|$|^|&|(|)|+|=|{|}|:|,|<|>|?|_|/|\|\"|'|;|%|\`| ]"
     if [[ "$1" =~ $exclude ]] || [[ "$1" =~ "^[0-9]+$" ]]; then
-        echo "Error: domain alias $1 is not valid"
+        echo "Error: $2 $1 is not valid"
         log_event "$E_INVALID" "$EVENT"
         exit $E_INVALID
     fi
@@ -750,6 +784,17 @@ validate_format_common() {
         log_event "$E_INVALID" "$EVENT"
         exit $E_INVALID
     fi
+    if [[ "$1" =~ @ ]] && [ ${#1} -gt 1 ] ; then
+        echo "Error: @ can not be mixed"
+        log_event "$E_INVALID" "$EVENT"
+        exit $E_INVALID
+    fi
+    if [[ $1 =~ \* ]]; then
+        if [ "$(echo $1 | grep -o '*'|wc -l)" -gt 1 ]; then
+            log_event "$E_INVALID" "$EVENT"
+            echo "Error: * can be used only once"
+        fi
+    fi
 }
 
 # DNS record value
@@ -792,6 +837,42 @@ validate_format_autoreply() {
     fi
 }
 
+# Firewall action
+validate_format_fw_action() {
+    if [ "$1" != "ACCEPT" ] && [ "$1" != 'DROP' ] ; then
+        echo "Error: $1 is not valid action"
+        log_event "$E_INVALID" "$EVENT"
+        exit $E_INVALID
+    fi
+}
+
+# Firewall protocol
+validate_format_fw_protocol() {
+    if [ "$1" != "ICMP" ] && [ "$1" != 'UDP' ] && [ "$1" != 'TCP' ] ; then
+        echo "Error: $1 is not valid protocol"
+        log_event "$E_INVALID" "$EVENT"
+        exit $E_INVALID
+    fi
+}
+
+# Firewall port
+validate_format_fw_port() {
+    if [ "${#1}" -eq 1 ]; then
+        if ! [[ "$1" =~ [0-9] ]]; then
+            echo "Error: port $1 is not valid"
+            log_event "$E_INVALID" "$EVENT"
+            exit 1
+        fi
+    else
+        if ! [[ "$1" =~ ^[0-9][-|,|:|0-9]{0,30}[0-9]$ ]]
+        then
+            echo "Error: port $1 is not valid"
+            log_event "$E_INVALID" "$EVENT"
+            exit 1
+        fi
+    fi
+}
+
 # Format validation controller
 validate_format(){
     for arg_name in $*; do
@@ -804,12 +885,14 @@ validate_format(){
 
         case $arg_name in
             account)        validate_format_username "$arg" "$arg_name" ;;
+            action)         validate_format_fw_action "$arg";;
             antispam)       validate_format_boolean "$arg" 'antispam' ;;
             antivirus)      validate_format_boolean "$arg" 'antivirus' ;;
             autoreply)      validate_format_autoreply "$arg" ;;
             backup)         validate_format_domain "$arg" 'backup' ;;
             charset)        validate_format_name "$arg" "$arg_name" ;;
             charsets)       validate_format_common "$arg" 'charsets' ;;
+            comment)        validate_format_name "$arg" 'comment' ;;
             database)       validate_format_database "$arg" 'database';;
             day)            validate_format_mhdmw "$arg" $arg_name ;;
             dbpass)         validate_format_password "$arg" ;;
@@ -837,23 +920,27 @@ validate_format(){
             key)            validate_format_username "$arg" "$arg_name" ;;
             lname)          validate_format_name_s "$arg" "$arg_name" ;;
             malias)         validate_format_username "$arg" "$arg_name" ;;
-            mask)           validate_format_ip "$arg" ;;
             max_db)         validate_format_int "$arg" 'max db';;
             min)            validate_format_mhdmw "$arg" $arg_name ;;
             month)          validate_format_mhdmw "$arg" $arg_name ;;
             nat_ip)         validate_format_ip "$arg" ;;
+            netmask)        validate_format_ip "$arg" ;;
             newid)          validate_format_int "$arg" 'id' ;;
             ns1)            validate_format_domain "$arg" 'name_server';;
             ns2)            validate_format_domain "$arg" 'name_server';;
             ns3)            validate_format_domain "$arg" 'name_server';;
             ns4)            validate_format_domain "$arg" 'name_server';;
+            object)         validate_format_name_s "$arg" 'object';;
             package)        validate_format_name "$arg" "$arg_name" ;;
             password)       validate_format_password "$arg" ;;
             port)           validate_format_int "$arg" 'port' ;;
+            port_ext)       validate_format_fw_port "$arg";;
+            protocol)       validate_format_fw_protocol "$arg" ;;
             quota)          validate_format_int "$arg" 'quota' ;;
             restart)        validate_format_boolean "$arg" 'restart' ;;
             record)         validate_format_common "$arg" 'record';;
             rtype)          validate_format_dns_type "$arg" ;;
+            rule)           validate_format_int "$arg" "rule id" ;;
             shell)          validate_format_shell "$arg" ;;
             soa)            validate_format_domain "$arg" 'soa_record';;
             stats_pass)     validate_format_password "$arg" ;;

@@ -9,10 +9,11 @@
 #                    Variable&Function                     #
 #----------------------------------------------------------#
 
-# Argument defenition
+# Argument definition
 domain=$1
 domain=$(echo $domain | sed -e 's/\.*$//g' -e 's/^\.*//g')
 domain=$(echo $domain | tr '[:upper:]' '[:lower:]')
+domain_alias=$domain
 email=$2
 country=$3
 state=$4
@@ -57,7 +58,7 @@ shell_list_ssl() {
 #----------------------------------------------------------#
 
 check_args '7' "$#" 'DOMAIN EMAIL COUNTRY STATE CITY ORG UNIT [FORMAT]'
-validate_format 'domain' 'format'
+validate_format 'domain_alias' 'format'
 
 
 #----------------------------------------------------------#
@@ -79,7 +80,7 @@ subj="/C=$country/ST=$state/localityName=$city/O=$org"
 subj="$subj/organizationalUnitName=$org_unit/commonName=$domain"
 subj="$subj/emailAddress=$email"
 
-openssl req \
+openssl req -sha256\
     -new \
     -batch \
     -subj "$subj" \
@@ -96,7 +97,7 @@ openssl rsa \
 rm $domain.key.tmp
 
 # Generate the cert 1 year
-openssl x509 -req \
+openssl x509 -req -sha256 \
     -days $DAYS \
     -in $domain.csr \
     -signkey $domain.key \

@@ -9,7 +9,7 @@
 #                    Variable&Function                     #
 #----------------------------------------------------------#
 
-# Argument defenition
+# Argument definition
 user=$1
 domain=$(idn -t --quiet -u "$2" )
 domain=$(echo $domain | tr '[:upper:]' '[:lower:]')
@@ -49,7 +49,7 @@ fi
 #----------------------------------------------------------#
 
 if [[ "$MAIL_SYSTEM" =~ exim ]]; then
-    sed -i "/^$malias@$domain:$account/d" \
+    sed -i "/^$malias@$domain_idn:$account/d" \
         $HOMEDIR/$user/conf/mail/$domain/aliases
 fi
 

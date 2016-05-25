@@ -9,6 +9,12 @@ include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 // Check POST request
 if (!empty($_POST['ok'])) {
 
+    // Check token
+    if ((!isset($_POST['token'])) || ($_SESSION['token'] != $_POST['token'])) {
+        header('location: /login/');
+        exit();
+    }
+
     // Check empty fields
     if (empty($_POST['v_database'])) $errors[] = __('database');
     if (empty($_POST['v_dbuser'])) $errors[] = __('username');
@@ -43,7 +49,6 @@ if (!empty($_POST['ok'])) {
     // Protect input
     $v_database = escapeshellarg($_POST['v_database']);
     $v_dbuser = escapeshellarg($_POST['v_dbuser']);
-    $v_password = escapeshellarg($_POST['v_password']);
     $v_type = $_POST['v_type'];
     $v_charset = $_POST['v_charset'];
     $v_host = $_POST['v_host'];
@@ -54,9 +59,15 @@ if (!empty($_POST['ok'])) {
         $v_type = escapeshellarg($_POST['v_type']);
         $v_charset = escapeshellarg($_POST['v_charset']);
         $v_host = escapeshellarg($_POST['v_host']);
+        $v_password = tempnam("/tmp","vst");
+        $fp = fopen($v_password, "w");
+        fwrite($fp, $_POST['v_password']."\n");
+        fclose($fp);
         exec (VESTA_CMD."v-add-database ".$user." ".$v_database." ".$v_dbuser." ".$v_password." ".$v_type." ".$v_host." ".$v_charset, $output, $return_var);
         check_return_code($return_var,$output);
         unset($output);
+        unlink($v_password);
+        $v_password = escapeshellarg($_POST['v_password']);
         $v_type = $_POST['v_type'];
         $v_host = $_POST['v_host'];
         $v_charset = $_POST['v_charset'];
@@ -64,17 +75,14 @@ if (!empty($_POST['ok'])) {
 
     // Get database manager url
     if (empty($_SESSION['error_msg'])) {
-        exec (VESTA_CMD."v-list-sys-config json", $output, $return_var);
-        $sys = json_decode(implode('', $output), true);
-        unset($output);
         list($http_host, $port) = explode(':', $_SERVER["HTTP_HOST"] . ":");
         if ($_POST['v_host'] != 'localhost' ) $http_host = $_POST['v_host'];
         if ($_POST['v_type'] == 'mysql') $db_admin = "phpMyAdmin";
         if ($_POST['v_type'] == 'mysql') $db_admin_link = "http://".$http_host."/phpmyadmin/";
-        if (($_POST['v_type'] == 'mysql') && (!empty($sys['config']['DB_PMA_URL']))) $db_admin_link = $sys['config']['DB_PMA_URL'];
+        if (($_POST['v_type'] == 'mysql') && (!empty($_SESSION['DB_PMA_URL']))) $db_admin_link = $_SESSION['DB_PMA_URL'];
         if ($_POST['v_type'] == 'pgsql') $db_admin = "phpPgAdmin";
         if ($_POST['v_type'] == 'pgsql') $db_admin_link = "http://".$http_host."/phppgadmin/";
-        if (($_POST['v_type'] == 'pgsql') && (!empty($sys['config']['DB_PGA_URL']))) $db_admin_link = $sys['config']['DB_PGA_URL'];
+        if (($_POST['v_type'] == 'pgsql') && (!empty($_SESSION['DB_PGA_URL']))) $db_admin_link = $_SESSION['DB_PGA_URL'];
     }
 
     // Email login credentials
@@ -89,7 +97,7 @@ if (!empty($_POST['ok'])) {
 
     // Flush field values on success
     if (empty($_SESSION['error_msg'])) {
-        $_SESSION['ok_msg'] = __('DATABASE_CREATED_OK',$user."_".$_POST['v_database'],$user."_".$_POST['v_database']);
+        $_SESSION['ok_msg'] = __('DATABASE_CREATED_OK',htmlentities($user)."_".htmlentities($_POST['v_database']),htmlentities($user)."_".htmlentities($_POST['v_database']));
         $_SESSION['ok_msg'] .= " / <a href=".$db_admin_link." target='_blank'>" . __('open %s',$db_admin) . "</a>";
         unset($v_database);
         unset($v_dbuser);
@@ -109,9 +117,7 @@ top_panel($user,$TAB);
 $v_db_email = $panel[$user]['CONTACT'];
 
 // List avaiable database types
-exec (VESTA_CMD."v-list-database-types 'json'", $output, $return_var);
-$db_types = json_decode(implode('', $output), true);
-unset($output);
+$db_types = split(",",$_SESSION['DB_SYSTEM']);
 
 // List available database servers
 $db_hosts = array();
