@@ -1,6 +1,6 @@
 Name:           vesta
-Version:        0.9.8
-Release:        15
+Version:        1.0.0
+Release:        7
 Summary:        Vesta Control Panel
 Group:          System Environment/Base
 License:        GPL
@@ -16,6 +16,8 @@ Provides:       vestacp vesta-api vesta
 %description
 This package contains the packages for Vesta Control Panel api.
 
+%global debug_package %{nil}
+
 %prep
 %setup -q -n %{name}-%{version}
 
@@ -30,12 +32,30 @@ rm -rf %{buildroot}
 
 %post
 if [ $1 -ge 2 ]; then
-    if [ -e /usr/local/vesta/upd/add_sudo.sh ]; then
+    if [ -x /usr/local/vesta/upd/add_sudo.sh ]; then
         /usr/local/vesta/upd/add_sudo.sh
     fi
-    if [ -e /usr/local/vesta/upd/add_notifications.sh ]; then
+    if [ -x /usr/local/vesta/upd/add_notifications.sh ]; then
         /usr/local/vesta/upd/add_notifications.sh
     fi
+    if [ -x /usr/local/vesta/upd/fix_sessions.sh ]; then
+        /usr/local/vesta/upd/fix_sessions.sh
+    fi
+    if [ -x /usr/local/vesta/upd/fix_nginx_auth.sh ]; then
+        /usr/local/vesta/upd/fix_nginx_auth.sh
+    fi
+    if [ -x /usr/local/vesta/upd/fix_roundcube.sh ]; then
+        /usr/local/vesta/upd/fix_roundcube.sh
+    fi
+
+    if [ -x /usr/local/vesta/upd/limit_sudo.sh ]; then
+        /usr/local/vesta/upd/limit_sudo.sh
+    fi
+
+    if [ -x /usr/local/vesta/upd/fix_dhcprenew.sh ]; then
+        /usr/local/vesta/upd/fix_dhcprenew.sh
+    fi
+
 fi
 %files
 %{_vestadir}
@@ -50,6 +70,93 @@ fi
 %config(noreplace) %{_vestadir}/web/css/uploadify.css
 
 %changelog
+* Wed Oct 12 2022 Serghey Rodin <builder@vestacp.com> - 1.0.0-7
+- Frontend bugfixes
+- Bugfixes
+- Security fixes
+
+* Fri Feb 25 2022 Serghey Rodin <builder@vestacp.com> - 1.0.0-6
+- Frontend bugfixes
+
+* Mon Nov 22 2021 Serghey Rodin <builder@vestacp.com> - 1.0.0-5
+- Bugfixes
+
+* Mon Nov 1 2021 Serghey Rodin <builder@vestacp.com> - 1.0.0-4
+- Merge pull request #2128 to fix LE related issues in UI
+
+* Sun Oct 31 2021 Serghey Rodin <builder@vestacp.com> - 1.0.0-3
+- Merge pull request #2108 and #2109
+
+* Sat Oct 30 2021 Serghey Rodin <builder@vestacp.com> - 1.0.0-2
+- Merge pull request #2074 from mix5003/fix-fi
+
+* Sat Oct 30 2021 Serghey Rodin <builder@vestacp.com> - 1.0.0-1
+- Modern Web UI based on React
+- Bugfixes
+
+* Sat Sep 29 2019 Serghey Rodin <builder@vestacp.com> - 0.9.8-26
+- Let's Encrypt HTTP/2 support
+
+* Thu Aug 15 2019 Serghey Rodin <builder@vestacp.com> - 0.9.8-25
+- Security bugfixes
+- LEv2 idn fix
+
+* Mon Apr 18 2019 Serghey Rodin <builder@vestacp.com> - 0.9.8-24
+- Bugfixes
+- Security patches
+- LEv2
+- Server LE
+- i18n updates
+
+* Thu Oct 18 2018 Serghey Rodin <builder@vestacp.com> - 0.9.8-23
+- Security fixes
+
+* Wed Jun 27 2018 Serghey Rodin <builder@vestacp.com> - 0.9.8-22
+- Security fixes
+
+* Fri May 11 2018 Serghey Rodin <builder@vestacp.com> - 0.9.8-21
+- Additional security fixes
+
+* Sun Apr 08 2018 Serghey Rodin <builder@vestacp.com> - 0.9.8-20
+- Hardening password checks
+
+* Wed Jan 10 2018 Serghey Rodin <builder@vestacp.com> - 0.9.8-19
+- Fixed backup restore function
+
+* Fri Dec 29 2017 Serghey Rodin <builder@vestacp.com> - 0.9.8-18
+- Let's Encrypt for internationalized domains (IDN)
+- Softaculous Application Installer
+- Debian 9 support sponsored by isicore.com
+- Ubuntu 16.10 and 17.04 support
+- Korean, Urdu, Thai, Brazilian Portuguese, Serbian and Bulgarian language support
+- We've made 1478 commits
+- 29 bugs closed / 141 pull requests merged
+
+* Mon Nov 14 2016 Serghey Rodin <builder@vestacp.com> - 0.9.8-17
+- System Config Editor
+- Let's Encrypt GUI
+- Google Nearline expiremental backup support
+- User notifcation panel
+- ClamAV fixes for CentOS/Debian/Ubuntu
+- i18n updates
+- Web stats support for php-fpm systems
+- Georgian Translation
+- Filemanager improvements
+- Imap/Pop3 JS helpers
+- Dozen bugfixes including security issues
+
+
+* Mon Jun 27 2016 Serghey Rodin <builder@vestacp.com> - 0.9.8-16
+- Full keyboard control
+- Cron Helper
+- LetsEncrypt Support cli-only
+- Language files update
+- File permission in File Manager
+- Handle DES passwords
+- New templates for PHP-FPM
+- Core refactoring
+- Dozen bugfixes including security issues
+
 * Fri Nov 06 2015 Serghey Rodin <builder@vestacp.com> - 0.9.8-15
 - File Manager (commercial plugin)
 - SFTP Chroot (commercial plugin)

@@ -2,6 +2,13 @@
 
 //session_start();
 
+$hostname = exec('hostname');
+$port = $_SERVER['SERVER_PORT'];
+$expected_http_origin="https://".$hostname.":".$port;
+if ($_SERVER['HTTP_ORIGIN'] != $expected_http_origin) {
+    die ("Nope.");
+}
+
 include($_SERVER['DOCUMENT_ROOT']."/inc/main.php");
 
 // Check login_as feature
@@ -469,7 +476,7 @@ class UploadHandler
             1
         );
     }
-    
+
     protected function sanitizeFileName($file) {
         // (|\\?*<\":>+[]/')
         // \|\\\?\*\<\"\'\:\>\+\[\]
@@ -559,6 +566,25 @@ class UploadHandler
             $content_range
         );
     }
+
+    protected function get_current_file_name($file_path, $name, $size, $type, $error,
+            $index, $content_range) {
+
+        $name = $this->trim_file_name($file_path, $name, $size, $type, $error, $index, $content_range);
+
+
+        return $this->get_unique_filename(
+            $file_path,
+            $this->fix_file_extension($file_path, $name, $size, $type, $error,
+                $index, $content_range),
+            $size,
+            $type,
+            $error,
+            $index,
+            $content_range
+        );
+    }
+
 
     protected function handle_form_data($file, $index) {
         // Handle form data, e.g. $_REQUEST['description'][$index]
@@ -1078,10 +1104,14 @@ class UploadHandler
     protected function handle_file_upload($uploaded_file, $name, $size, $type, $error,
         $index = null, $content_range = null) {
 
-
         $file = new \stdClass();
-        $file->name = $this->get_file_name($uploaded_file, $name, $size, $type, $error,
-            $index, $content_range);
+//        $file->name = $this->get_file_name($uploaded_file, $name, $size, $type, $error,
+//            $index, $content_range);
+
+        $file->name = $this->trim_file_name($uploaded_path, $name, $size, $type, $error, $index, $content_range);
+        $file->name = $this->fix_file_extension($uploaded_path, $name, $size, $type, $error, $index, $content_range);
+
+
         $file->size = $this->fix_integer_overflow(intval($size));
         $file->type = $type;
         if ($this->validate($uploaded_file, $file, $error, $index)) {
@@ -1094,37 +1124,12 @@ class UploadHandler
             $append_file = $content_range && is_file($file_path) &&
                 $file->size > $this->get_file_size($file_path);
             if ($uploaded_file && is_uploaded_file($uploaded_file)) {
-                // multipart/formdata uploads (POST method uploads)
-                if ($append_file) {
-                    file_put_contents(
-                        $file_path,
-                        fopen($uploaded_file, 'r'),
-                        FILE_APPEND
-                    );
-                } else {
-                    chmod($uploaded_file, 0644);
-                    //move_uploaded_file($uploaded_file, $file_path);
-                    exec (VESTA_CMD . "v-copy-fs-file ". USERNAME ." {$uploaded_file} {$file_path}", $output, $return_var);
-
-                    $error = check_return_code($return_var, $output);
-                    if ($return_var != 0) {
-                        //var_dump(VESTA_CMD . "v-copy-fs-file {$user} {$fn} {$path}");
-                        //var_dump($path);
-                        //var_dump($output);
-                        $file->error = 'Error while saving file';
-                        /*var_dump(VESTA_CMD . "v-copy-fs-file ". USERNAME ." {$uploaded_file} {$file_path}");
-                        var_dump($return_var);
-                        var_dump($output);
-                        die();*/
-                    }
+                chmod($uploaded_file, 0644);
+                exec (VESTA_CMD . "v-copy-fs-file ". USERNAME ." ".$uploaded_file." ".escapeshellarg($file_path), $output, $return_var);
+                $error = check_return_code($return_var, $output);
+                if ($return_var != 0) {
+                    $file->error = 'Error while saving file ';
                 }
-            } else {
-                // Non-multipart uploads (PUT method support)
-                file_put_contents(
-                    $file_path,
-                    fopen('php://input', 'r'),
-                    $append_file ? FILE_APPEND : 0
-                );
             }
             $file_size = $this->get_file_size($file_path, $append_file);
 

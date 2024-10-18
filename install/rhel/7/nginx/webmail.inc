@@ -1,5 +1,5 @@
 location /webmail {
-    alias /usr/share/roundcubemail/;
+    alias /usr/share/roundcubemail;
 
     location ~ /(config|temp|logs) {
         return 404;
@@ -11,5 +11,8 @@ location /webmail {
         fastcgi_index index.php;
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $request_filename;
+    }
+    location ~* ^/webmail/(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+        alias /usr/share/roundcubemail/$1;
     }
 }

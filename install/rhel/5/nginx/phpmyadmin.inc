@@ -1,5 +1,5 @@
 location /phpmyadmin {
-    alias /usr/share/phpMyAdmin/;
+    alias /usr/share/phpMyAdmin;
 
     location ~ /(libraries|setup) {
         return 404;
@@ -12,4 +12,8 @@ location /phpmyadmin {
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $request_filename;
     }
+    location ~* ^/phpmyadmin/(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+        root /usr/share/;
+    }
+
 }

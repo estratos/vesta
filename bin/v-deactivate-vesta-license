@@ -2,7 +2,7 @@
 # info: deactivate vesta license
 # options: MODULE LICENSE
 #
-# The function activates and register vesta license
+# The function deactivates vesta license
 
 
 #----------------------------------------------------------#
@@ -35,7 +35,7 @@ check_args '2' "$#" 'MODULE LICENSE'
 
 # Activating license
 v_host='https://vestacp.com/checkout'
-answer=$(curl -s $v_host/cancel.php?licence_key=$license)
+answer=$(curl -s "$v_host/cancel.php?licence_key=$license&module=$module")
 check_result $? "cant' connect to vestacp.com " $E_CONNECT
 
 # Checking server answer
@@ -60,6 +60,6 @@ if [ "$module" = 'SFTPJAIL' ]; then
 fi
 
 # Logging
-log_event "$OK" "$EVENT"
+log_event "$OK" "$ARGUMENTS"
 
 exit

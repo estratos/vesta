@@ -16,16 +16,12 @@ force=$3
 
 # Includes
 source $VESTA/func/main.sh
+source $VESTA/func/domain.sh
 source $VESTA/conf/vesta.conf
 
 is_package_avalable() {
 
-    usr_data=$(cat $USER_DATA/user.conf)
-    IFS=$'\n'
-    for key in $usr_data; do
-        eval ${key%%=*}=${key#*=}
-    done
-
+    source $USER_DATA/user.conf
     WEB_DOMAINS='0'
     DATABASES='0'
     MAIL_DOMAINS='0'
@@ -33,70 +29,66 @@ is_package_avalable() {
     DISK_QUOTA='0'
     BANDWIDTH='0'
 
-    pkg_data=$(cat $VESTA/data/packages/$package.pkg |grep -v TIME |\
-        grep -v DATE)
-    eval $pkg_data
+    pkg_data=$(cat $VESTA/data/packages/$package.pkg| egrep -v "TIME|DATE")
+    IFS=$'\n'
+    for str in $pkg_data; do
+        key=$(echo $str |cut -f 1 -d =)
+        value=$(echo $str |cut -f 2 -d \')
+        eval $key="$value"
+    done
 
     # Checking usage agains package limits
     if [ "$WEB_DOMAINS" != 'unlimited' ]; then
         if [ "$WEB_DOMAINS" -lt "$U_WEB_DOMAINS" ]; then
-            echo "Error: Package doesn't cover WEB_DOMAIN usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover WEB_DOMAIN usage"
         fi
     fi
-    if [ "$DNS_DOMAINS" ! = 'unlimited' ]; then
+    if [ "$DNS_DOMAINS" != 'unlimited' ]; then
         if [ "$DNS_DOMAINS" -lt "$U_DNS_DOMAINS" ]; then
-            echo "Error: Package doesn't cover DNS_DOMAIN usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover DNS_DOMAIN usage"
         fi
     fi
     if [ "$MAIL_DOMAINS" != 'unlimited' ]; then
         if [ "$MAIL_DOMAINS" -lt "$U_MAIL_DOMAINS" ]; then
-            echo "Error: Package doesn't cover MAIL_DOMAIN usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover MAIL_DOMAIN usage"
         fi
     fi
     if [ "$DATABASES" != 'unlimited' ]; then
         if [ "$DATABASES" -lt "$U_DATABASES" ]; then
-            echo "Error: Package doesn't cover DATABASE usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover DATABASE usage"
         fi
     fi
     if [ "$CRON_JOBS" != 'unlimited' ]; then
         if [ "$CRON_JOBS" -lt "$U_CRON_JOBS" ]; then
-            echo "Error: Package doesn't cover CRON usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover CRON usage"
         fi
     fi
     if [ "$DISK_QUOTA" != 'unlimited' ]; then
         if [ "$DISK_QUOTA" -lt "$U_DISK" ]; then
-            echo "Error: Package doesn't cover DISK usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover DISK usage"
         fi
     fi
     if [ "$BANDWIDTH" != 'unlimited' ]; then
         if [ "$BANDWIDTH" -lt "$U_BANDWIDTH" ]; then
-            echo "Error: Package doesn't cover BANDWIDTH usage"
-            log_event "$E_LIMIT" "$EVENT"
-            exit $E_LIMIT
+            check_result $E_LIMIT "Package doesn't cover BANDWIDTH usage"
         fi
     fi
+
+    # Checking templates
+    is_web_template_valid $WEB_TEMPLATE
+    is_dns_template_valid $DNS_TEMPLATE
+    is_proxy_template_valid $PROXY_TEMPLATE
 }
 
 change_user_package() {
-    usr_data=$(cat $USER_DATA/user.conf)
-    eval $usr_data
-
-    pkg_data=$(cat $VESTA/data/packages/$package.pkg |grep -v TIME |\
-        grep -v DATE)
-    eval $pkg_data
-
+    source $USER_DATA/user.conf
+    pkg_data=$(cat $VESTA/data/packages/$package.pkg| egrep -v "TIME|DATE")
+    IFS=$'\n'
+    for str in $pkg_data; do
+        key=$(echo $str |cut -f 1 -d =)
+        value=$(echo $str |cut -f 2 -d \')
+        eval $key="$value"
+    done
     echo "FNAME='$FNAME'
 LNAME='$LNAME'
 PACKAGE='$package'
@@ -159,7 +151,7 @@ DATE='$DATE'" > $USER_DATA/user.conf
 #----------------------------------------------------------#
 
 check_args '2' "$#" 'USER PACKAGE [FORCE]'
-validate_format 'user' 'package'
+is_format_valid 'user' 'package'
 is_object_valid 'user' 'USER' "$user"
 is_package_valid
 if [ "$force" != 'yes' ];then
@@ -175,7 +167,7 @@ fi
 change_user_package
 
 # Update user shell
-shell_conf=$(echo "$pkg_data" | grep 'SHELL' | cut -f 2 -d \')
+shell_conf=$(echo "$pkg_data" |grep 'SHELL' |cut -f 2 -d \')
 shell=$(grep -w "$shell_conf" /etc/shells |head -n1)
 /usr/bin/chsh -s "$shell" "$user" &>/dev/null
 
@@ -197,6 +189,6 @@ fi
 
 # Logging
 log_history "changed $user package to $package" '' 'admin'
-log_event "$OK" "$EVENT"
+log_event "$OK" "$ARGUMENTS"
 
 exit

@@ -1,6 +1,6 @@
 Name:           vesta-php
-Version:        0.9.8
-Release:        15
+Version:        1.0.0
+Release:        1
 Summary:        Vesta Control Panel
 Group:          System Environment/Base
 License:        GPL
@@ -20,9 +20,9 @@ This package contains php-cgi for Vesta Control Panel web interface.
 %setup -q -n %{name}-%{version}
 
 %build
-./configure --prefix=/usr/local/vesta/php --enable-fpm --with-fpm-user=admin --with-fpm-group=admin
+./configure --prefix=/usr/local/vesta/php --with-zlib --enable-zip --enable-fpm --with-fpm-user=admin --with-fpm-group=admin --with-mysql --with-mysqli --with-curl --enable-mbstring
 
-make
+make ZEND_EXTRA_LIBS='-lresolv'
 
 %install
 make install INSTALL_ROOT=%{buildroot} INSTALLDIRS=vendor
@@ -40,6 +40,13 @@ rm -rf $RPM_BUILD_ROOT/.lock
 %clean
 rm -rf %{buildroot}
 
+%post
+if [ $1 -eq 1 ]; then
+    if [ -e /usr/local/vesta/ioncube/ioncube.sh ]; then
+        /usr/local/vesta/ioncube/ioncube.sh add
+    fi
+fi
+
 %postun
 if [ $1 -ge 1 ]; then
     if [ -e "/var/run/vesta-php.pid" ]; then
@@ -52,6 +59,9 @@ fi
 %attr(755,root,root) /usr/local/vesta/php
 
 %changelog
+* Wed Jul 31 2013 Serghey Rodin <builder@vestacp.com> - 0.9.8-16
+- New session save path
+
 * Wed Jul 31 2013 Serghey Rodin <builder@vestacp.com> - 0.9.8-1
 - Upgraded to 5.4.17
 
